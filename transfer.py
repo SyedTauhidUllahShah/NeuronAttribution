@@ -5,8 +5,8 @@
 Neuron Attribution for Efficient Arithmetic Knowledge Transfer across LLaMA Models
 
 This implementation applies the Comparative Neuron Analysis (CNA) method to identify 
-critical neurons responsible for arithmetic capabilities in LLaMA-13B, and transfers
-these neurons to LLaMA-7B to enhance its arithmetic reasoning abilities.
+critical neurons responsible for arithmetic capabilities in LLaMA-13B and transfers
+these neurons to LLaMA-7B to improve its arithmetic reasoning abilities.
 
 The approach includes:
 1. Creating arithmetic datasets for various operations
