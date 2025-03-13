@@ -221,6 +221,11 @@ class LLaMAModelManager:
     
     def __init__(self, cache_dir=None):
         self.cache_dir = cache_dir
+        # Get HuggingFace token from environment variable
+        self.hf_token = os.environ.get("HUGGINGFACE_TOKEN")
+        if not self.hf_token:
+            logger.warning("HUGGINGFACE_TOKEN environment variable not set. "
+                          "You may encounter authentication issues when accessing gated models.")
     
     def load_model(self, model_name, is_8bit=False, device=device):
         """
@@ -236,11 +241,21 @@ class LLaMAModelManager:
         """
         logger.info(f"Loading model: {model_name}")
         
+        # Common kwargs for both tokenizer and model
+        common_kwargs = {
+            "cache_dir": self.cache_dir,
+        }
+        
+        # Add token if available
+        if self.hf_token:
+            common_kwargs["token"] = self.hf_token
+            logger.info("Using HuggingFace token from environment variable")
+        
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             model_name, 
             use_fast=False,
-            cache_dir=self.cache_dir
+            **common_kwargs
         )
         
         # Ensure tokenizer has pad token
@@ -249,7 +264,7 @@ class LLaMAModelManager:
         
         # Load model with memory optimizations if needed
         load_kwargs = {
-            "cache_dir": self.cache_dir,
+            **common_kwargs,
             "torch_dtype": torch.float16,  # Load in half precision
             "device_map": "auto" if is_8bit else None,  # Needed for 8-bit loading
         }
@@ -1040,11 +1055,12 @@ class ArithmeticTransferExperiment:
     """
     
     def __init__(self, 
-                teacher_model_name="meta-llama/Llama-13b-hf", 
-                student_model_name="meta-llama/Llama-7b-hf",
+                teacher_model_name="meta-llama/Llama-2-13b-hf", 
+                student_model_name="meta-llama/Llama-2-7b-hf",
                 output_dir=None, 
                 cache_dir=None,
-                device="cuda"):
+                device="cuda",
+                hf_token=None):
         """
         Initialize experiment.
         
@@ -1054,6 +1070,7 @@ class ArithmeticTransferExperiment:
             output_dir: Directory to save results
             cache_dir: Directory to cache models
             device: Compute device
+            hf_token: HuggingFace token (overrides env variable if provided)
         """
         self.teacher_model_name = teacher_model_name
         self.student_model_name = student_model_name
@@ -1073,6 +1090,10 @@ class ArithmeticTransferExperiment:
         file_handler = logging.FileHandler(os.path.join(self.output_dir, "experiment.log"))
         file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
+        
+        # Use provided token if given, otherwise it will be read from env in model manager
+        if hf_token:
+            os.environ["HUGGINGFACE_TOKEN"] = hf_token
         
         # Initialize manager for loading models
         self.model_manager = LLaMAModelManager(cache_dir=cache_dir)
@@ -1120,7 +1141,8 @@ class ArithmeticTransferExperiment:
             "calibration_lr": calibration_lr,
             "calibration_epochs": calibration_epochs,
             "start_time": start_time,
-            "device": str(self.device)
+            "device": str(self.device),
+            "huggingface_token_provided": "HUGGINGFACE_TOKEN" in os.environ
         }
         
         with open(os.path.join(self.output_dir, "experiment_config.json"), "w") as f:
@@ -1337,12 +1359,14 @@ def main():
     parser = argparse.ArgumentParser(description="Neuron Attribution for Arithmetic Knowledge Transfer")
     
     # Model arguments
-    parser.add_argument("--teacher", type=str, default="meta-llama/Llama-13b-hf",
+    parser.add_argument("--teacher", type=str, default="meta-llama/Llama-2-13b-hf",
                        help="Teacher model name or path")
-    parser.add_argument("--student", type=str, default="meta-llama/Llama-7b-hf",
+    parser.add_argument("--student", type=str, default="meta-llama/Llama-2-7b-hf",
                        help="Student model name or path")
     parser.add_argument("--cache-dir", type=str, default=None,
                        help="Directory to cache models")
+    parser.add_argument("--token", type=str, default=None,
+                       help="HuggingFace token for accessing gated models")
     
     # Experiment arguments
     parser.add_argument("--operations", type=str, default="+,-",
@@ -1370,6 +1394,18 @@ def main():
     
     # Parse operations
     operations = args.operations.split(",")
+    
+    # If token provided via command line, use it
+    if args.token:
+        os.environ["HUGGINGFACE_TOKEN"] = args.token
+        logger.info("Using HuggingFace token from command line argument")
+    elif "HUGGINGFACE_TOKEN" not in os.environ:
+        # Check if the token is set in environment
+        logger.warning(
+            "HUGGINGFACE_TOKEN not provided. You'll need this to access Llama models.\n"
+            "Set it using: export HUGGINGFACE_TOKEN=your_token_here\n"
+            "Or pass it with --token your_token_here"
+        )
     
     # Create and run experiment
     experiment = ArithmeticTransferExperiment(
