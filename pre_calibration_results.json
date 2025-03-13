@@ -1,0 +1,13 @@
+{
+  "overall_accuracy": 0.83,
+  "operation_accuracy": {
+    "+": 0.8823529411764706,
+    "-": 0.7755102040816326
+  },
+  "digits_accuracy": {
+    "1": 0.8333333333333334,
+    "2": 0.8269230769230769
+  },
+  "total_examples": 100,
+  "total_correct": 83
+}
